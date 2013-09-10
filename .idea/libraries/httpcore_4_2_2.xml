@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="httpcore-4.2.2">
-    <CLASSES>
-      <root url="jar://$USER_HOME$/.gradle/wrapper/dists/gradle-1.7-bin/2g3i7gan25uopmtc0lnjb1l9ff/gradle-1.7/lib/plugins/httpcore-4.2.2.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>
