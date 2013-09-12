@@ -111,9 +111,10 @@ publishing {
     generatePomFileForMavenJavaPublication {
         destination = file("$buildDir/generated-pom.xml")
     }
+
+    createReleaseTag.dependsOn publish
 }
 
-createReleaseTag.dependsOn publish
 
 task wrapper(type: Wrapper) {
     gradleVersion = '1.7'
