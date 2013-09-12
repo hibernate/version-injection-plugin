@@ -21,6 +21,8 @@ apply plugin: 'groovy'
 apply plugin: 'maven-publish'
 apply plugin: 'maven-publish-auth'
 
+apply from: 'http://tellurianring.com/projects/gradle-plugins/gradle-release/apply.groovy'
+
 apply plugin: 'idea'
 apply plugin: 'eclipse'
 
@@ -40,6 +42,8 @@ task sourcesJar(type: Jar, dependsOn: compileJava) {
     from sourceSets.main.allSource
     classifier = 'sources'
 }
+
+createReleaseTag.dependsOn publish
 
 publishing {
     publications {
@@ -76,8 +80,8 @@ publishing {
                     }
                     developers {
                         developer {
-                            id 'hibernate-team'
-                            name 'The Hibernate Development Team'
+                            id 'sebersole'
+                            name 'Steve Ebersole'
                             organization 'Hibernate.org'
                             organizationUrl 'http://hibernate.org'
                         }
