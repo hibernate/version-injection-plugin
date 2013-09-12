@@ -43,8 +43,6 @@ task sourcesJar(type: Jar, dependsOn: compileJava) {
     classifier = 'sources'
 }
 
-createReleaseTag.dependsOn publish
-
 publishing {
     publications {
         mavenJava(MavenPublication) {
@@ -115,6 +113,7 @@ publishing {
     }
 }
 
+createReleaseTag.dependsOn publish
 
 task wrapper(type: Wrapper) {
     gradleVersion = '1.7'
