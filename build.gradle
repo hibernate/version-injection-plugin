@@ -3,8 +3,14 @@ buildscript {
         mavenCentral()
         mavenLocal()
 
-        mavenRepo name: 'jboss-nexus', url: "http://repository.jboss.org/nexus/content/groups/public/"
-        mavenRepo name: "jboss-snapshots", url: "http://snapshots.jboss.org/maven2/"
+        maven {
+            name 'jboss-nexus'
+            url "http://repository.jboss.org/nexus/content/groups/public/"
+        }
+        maven {
+            name "jboss-snapshots"
+            url "http://snapshots.jboss.org/maven2/"
+        }
     }
     dependencies {
         classpath 'org.hibernate.build.gradle:gradle-maven-publish-auth:2.0.1'
@@ -14,7 +20,10 @@ buildscript {
 repositories {
     mavenCentral()
     mavenLocal()
-    mavenRepo name: "jboss", url: "http://repository.jboss.org/nexus/content/groups/public/"
+    maven {
+        name "jboss"
+        url "http://repository.jboss.org/nexus/content/groups/public/"
+    }
 }
 
 apply plugin: 'groovy'
@@ -113,6 +122,6 @@ publishing {
 }
 
 
-task wrapper(type: Wrapper) {
-    gradleVersion = '1.7'
+wrapper {
+    gradleVersion = '4.10.2'
 }
