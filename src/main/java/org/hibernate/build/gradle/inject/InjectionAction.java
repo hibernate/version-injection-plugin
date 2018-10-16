@@ -87,12 +87,7 @@ public class InjectionAction implements Action<Task> {
 		classPool =  new ClassPool( true );
 		classPool.appendClassPath( loaderClassPath );
 
-		try {
-			performInjections();
-		}
-		finally {
-			loaderClassPath.close();
-		}
+		performInjections();
 	}
 
 	private ClassLoader buildRuntimeScopeClassLoader() {
