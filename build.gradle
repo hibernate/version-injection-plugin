@@ -22,7 +22,7 @@ repositories {
 }
 
 group = 'org.hibernate.build.gradle'
-version = '2.0.0-SNAPSHOT'
+version = '2.0.0'
 
 buildDir = "target"
 
@@ -46,6 +46,7 @@ gradlePlugin {
             implementationClass = "org.hibernate.build.gradle.inject.InjectionPlugin"
             displayName = "Version Injection Plugin"
             description = "Gradle plugin for performing injection of the project's version into the bytecode of one or more members"
+            tags.set( [ "version-injection" ] )
         }
     }
 }
