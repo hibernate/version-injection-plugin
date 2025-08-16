@@ -24,6 +24,8 @@
 
 package org.hibernate.build.gradle.inject;
 
+import org.gradle.api.tasks.Nested;
+
 /**
  * @author Steve Ebersole
  */

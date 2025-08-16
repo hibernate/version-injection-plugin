@@ -2,117 +2,58 @@ buildscript {
     repositories {
         mavenCentral()
         mavenLocal()
-
-        mavenRepo name: 'jboss-nexus', url: "http://repository.jboss.org/nexus/content/groups/public/"
-        mavenRepo name: "jboss-snapshots", url: "http://snapshots.jboss.org/maven2/"
     }
     dependencies {
         classpath 'org.hibernate.build.gradle:gradle-maven-publish-auth:2.0.1'
     }
 }
 
+plugins {
+    id 'java-gradle-plugin'
+
+    // publishing
+    id "com.gradle.plugin-publish" version "1.2.1"
+    id "nu.studer.credentials" version "2.1"
+}
+
 repositories {
     mavenCentral()
     mavenLocal()
-    mavenRepo name: "jboss", url: "http://repository.jboss.org/nexus/content/groups/public/"
 }
 
-apply plugin: 'groovy'
-apply plugin: 'maven-publish'
-apply plugin: 'maven-publish-auth'
-
-apply plugin: 'idea'
-apply plugin: 'eclipse'
-
 group = 'org.hibernate.build.gradle'
-version = '1.0.1-SNAPSHOT'
+version = '2.0.0'
 
 buildDir = "target"
 
 dependencies {
-    compile gradleApi()
-    compile localGroovy()
-    compile 'org.javassist:javassist:3.18.1-GA'
+    compileOnly gradleApi()
+    implementation 'org.javassist:javassist:3.18.1-GA'
 }
 
-
-task sourcesJar(type: Jar, dependsOn: compileJava) {
-    from sourceSets.main.allSource
-    classifier = 'sources'
+java {
+    withSourcesJar()
+    withJavadocJar()
 }
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
+gradlePlugin {
+    website = "https://github.com/hibernate/version-injection-plugin"
+    vcsUrl = "https://github.com/hibernate/version-injection-plugin"
 
-            artifact sourcesJar {
-                classifier "sources"
-            }
-
-            pom.withXml {
-                // append additional metadata
-                asNode().children().last() + {
-                    resolveStrategy = Closure.DELEGATE_FIRST
-                    name 'Version Injection Plugin for Gradle'
-                    description 'Gradle plugin for dynamic injection of the project version into classes (bytecode manipulation)'
-                    url 'http://hibernate.org'
-                    organization {
-                        name 'Hibernate.org'
-                        url 'http://hibernate.org'
-                    }
-                    scm {
-                        url 'http://github.com/hibernate/version-injection-plugin'
-                        connection 'scm:git:http://github.com/hibernate/version-injection-plugin.git'
-                        developerConnection 'scm:git:git@github.com:hibernate/version-injection-plugin.git'
-                    }
-                    licenses {
-                        license {
-                            name 'GNU Lesser General Public License'
-                            url 'http://www.gnu.org/licenses/lgpl-2.1.html'
-                            comments 'See discussion at http://hibernate.org/license for more details.'
-                            distribution 'repo'
-                        }
-                    }
-                    developers {
-                        developer {
-                            id 'sebersole'
-                            name 'Steve Ebersole'
-                            organization 'Hibernate.org'
-                            organizationUrl 'http://hibernate.org'
-                        }
-                    }
-                }
-
-                // TEMPORARY : currently Gradle Publishing feature is exporting dependencies as 'runtime' scope,
-                //      rather than 'compile'; fix that.
-                asNode().dependencies[0].dependency.each {
-                    it.scope[0].value = 'compile'
-                }
-            }
+    plugins {
+        injection {
+            id = 'org.hibernate.build.version-injection'
+            implementationClass = "org.hibernate.build.gradle.inject.InjectionPlugin"
+            displayName = "Version Injection Plugin"
+            description = "Gradle plugin for performing injection of the project's version into the bytecode of one or more members"
+            tags.set( [ "version-injection" ] )
         }
     }
-
-    repositories {
-        maven {
-            if ( version.endsWith( 'SNAPSHOT' ) ) {
-                name 'jboss-snapshots-repository'
-                url 'https://repository.jboss.org/nexus/content/repositories/snapshots'
-            }
-            else {
-                name 'jboss-releases-repository'
-                url 'https://repository.jboss.org/nexus/service/local/staging/deploy/maven2/'
-            }
-        }
-    }
-
-    generatePomFileForMavenJavaPublication {
-        destination = file("$buildDir/generated-pom.xml")
-    }
-
 }
 
-
-task wrapper(type: Wrapper) {
-    gradleVersion = '1.7'
+ext {
+    //noinspection GrUnresolvedAccess
+    project.setProperty( 'gradle.publish.key', credentials.hibernatePluginPortalUsername )
+    //noinspection GrUnresolvedAccess
+    project.setProperty( 'gradle.publish.secret', credentials.hibernatePluginPortalPassword )
 }
