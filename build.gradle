@@ -3,17 +3,12 @@ buildscript {
         mavenCentral()
         mavenLocal()
     }
-    dependencies {
-        classpath 'org.hibernate.build.gradle:gradle-maven-publish-auth:2.0.1'
-    }
 }
 
 plugins {
     id 'java-gradle-plugin'
-
     // publishing
     id "com.gradle.plugin-publish" version "1.2.1"
-    id "nu.studer.credentials" version "2.1"
 }
 
 repositories {
@@ -22,18 +17,21 @@ repositories {
 }
 
 group = 'org.hibernate.build.gradle'
-version = '2.0.0'
-
 buildDir = "target"
 
 dependencies {
     compileOnly gradleApi()
-    implementation 'org.javassist:javassist:3.18.1-GA'
+    implementation 'org.javassist:javassist:3.30.2-GA'
 }
 
 java {
     withSourcesJar()
     withJavadocJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+	sourceCompatibility = '11'
+	targetCompatibility = '11'
 }
 
 gradlePlugin {
@@ -49,11 +47,4 @@ gradlePlugin {
             tags.set( [ "version-injection" ] )
         }
     }
-}
-
-ext {
-    //noinspection GrUnresolvedAccess
-    project.setProperty( 'gradle.publish.key', credentials.hibernatePluginPortalUsername )
-    //noinspection GrUnresolvedAccess
-    project.setProperty( 'gradle.publish.secret', credentials.hibernatePluginPortalPassword )
 }
