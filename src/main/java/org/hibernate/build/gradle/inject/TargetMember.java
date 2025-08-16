@@ -24,12 +24,12 @@
 
 package org.hibernate.build.gradle.inject;
 
-import org.gradle.api.tasks.Nested;
+import java.io.Serializable;
 
 /**
  * @author Steve Ebersole
  */
-public class TargetMember {
+public class TargetMember implements Serializable {
 	private final String className;
 	private final String memberName;
 

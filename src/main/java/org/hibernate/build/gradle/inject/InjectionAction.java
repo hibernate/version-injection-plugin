@@ -74,15 +74,10 @@ public class InjectionAction implements Action<Task> {
 	public void execute(Task task) {
 		final ClassLoader runtimeScopeClassLoader = buildRuntimeScopeClassLoader( task.getProject() );
 		loaderClassPath = new LoaderClassPath( runtimeScopeClassLoader );
-		classPool =  new ClassPool( true );
+		classPool = new ClassPool( true );
 		classPool.appendClassPath( loaderClassPath );
 
-		try {
-			performInjections( task.getProject() );
-		}
-		finally {
-			loaderClassPath.close();
-		}
+		performInjections( task.getProject() );
 	}
 
 	private ClassLoader buildRuntimeScopeClassLoader(Project project) {
@@ -99,7 +94,7 @@ public class InjectionAction implements Action<Task> {
 				throw new InjectionException( "Could not determine artifact URL [" + file.getPath() + "]", e );
 			}
 		}
-		return new URLClassLoader( classPathUrls.toArray( new URL[classPathUrls.size()] ), getClass().getClassLoader() );
+		return new URLClassLoader( classPathUrls.toArray( URL[]::new ), getClass().getClassLoader() );
 	}
 
 	private void performInjections(Project project) {
@@ -128,6 +123,13 @@ public class InjectionAction implements Action<Task> {
 				}
 			}
 
+			// maybe it's a private method ?
+			for ( CtMethod method : ctClass.getDeclaredMethods() ) {
+				if ( method.getName().equals( targetMember.getMemberName() ) ) {
+					return new MethodInjectionTarget( targetMember, ctClass, method );
+				}
+			}
+
 			// finally throw an exception
 			throw new InjectionException( "Unknown member [" + targetMember.getQualifiedName() + "]" );
 		}
@@ -139,7 +141,7 @@ public class InjectionAction implements Action<Task> {
 	/**
 	 * Strategy for performing an injection
 	 */
-	private static interface InjectionTarget {
+	private interface InjectionTarget {
 		/**
 		 * Inject the given value per this target's strategy.
 		 *
@@ -147,7 +149,7 @@ public class InjectionAction implements Action<Task> {
 		 *
 		 * @throws org.hibernate.build.gradle.inject.InjectionException Indicates a problem performing the injection.
 		 */
-		public void inject(String value);
+		void inject(String value);
 	}
 
 	private abstract class BaseInjectionTarget implements InjectionTarget {
@@ -180,23 +182,19 @@ public class InjectionAction implements Action<Task> {
 			long timeStamp = classFileLocation.lastModified();
 			ClassFile classFile = ctClass.getClassFile();
 			classFile.compact();
-			try {
-				DataOutputStream out = new DataOutputStream( new BufferedOutputStream( new FileOutputStream( classFileLocation ) ) );
-				try {
 
-					classFile.write( out );
-					out.flush();
-					if ( ! classFileLocation.setLastModified( System.currentTimeMillis() ) ) {
-						log.info( "Unable to manually update class file timestamp" );
-					}
-				}
-				finally {
-					out.close();
-					classFileLocation.setLastModified( timeStamp );
+			try ( DataOutputStream out = new DataOutputStream( new BufferedOutputStream( new FileOutputStream( classFileLocation ) ) ) ) {
+				classFile.write( out );
+				out.flush();
+				if ( !classFileLocation.setLastModified( System.currentTimeMillis() ) ) {
+					log.info( "Unable to manually update class file timestamp" );
 				}
 			}
-			catch ( IOException e ) {
+			catch (IOException e) {
 				throw new InjectionException( "Unable to write out modified class file", e );
+			}
+			finally {
+				classFileLocation.setLastModified( timeStamp );
 			}
 		}
 	}
