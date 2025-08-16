@@ -1,0 +1,83 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright Red Hat Inc. and Hibernate Authors
+ */
+
+@Library('hibernate-jenkins-pipeline-helpers') _
+
+import org.hibernate.jenkins.pipeline.helpers.version.Version
+
+pipeline {
+	agent {
+		label 'Release'
+	}
+	tools {
+		jdk 'OpenJDK 21 Latest'
+	}
+	options {
+		buildDiscarder logRotator(daysToKeepStr: '30', numToKeepStr: '10')
+		disableConcurrentBuilds(abortPrevious: false)
+	}
+	parameters {
+		string(
+				name: 'RELEASE_VERSION',
+				defaultValue: '',
+				description: 'The version to be released, e.g. 3.0.0.Final.',
+				trim: true
+		)
+		string(
+				name: 'DEVELOPMENT_VERSION',
+				defaultValue: '',
+				description: 'The next version to be used after the release, e.g. 3.0.0-SNAPSHOT.',
+				trim: true
+		)
+	}
+	stages {
+		stage('Release') {
+			when {
+				beforeAgent true
+				// Releases must be triggered explicitly
+				// This is just for safety; normally the Jenkins job for this pipeline
+				// should be configured to "Suppress automatic SCM triggering"
+				// See https://stackoverflow.com/questions/58259326/prevent-jenkins-multibranch-pipeline-from-triggering-builds-for-new-branches
+				triggeredBy cause: "UserIdCause"
+			}
+			steps {
+				script {
+					// Check that all the necessary parameters are set
+					if (!params.RELEASE_VERSION) {
+						throw new IllegalArgumentException("Missing value for parameter RELEASE_VERSION.")
+					}
+					if (!params.DEVELOPMENT_VERSION) {
+						throw new IllegalArgumentException("Missing value for parameter DEVELOPMENT_VERSION.")
+					}
+
+					def releaseVersion = Version.parseReleaseVersion(params.RELEASE_VERSION, Version.Scheme.JBOSS_NO_FINAL)
+					def developmentVersion = Version.parseDevelopmentVersion(params.DEVELOPMENT_VERSION)
+
+					echo "Performing full release for version ${releaseVersion.toString()}"
+
+					withMaven(mavenSettingsConfig: params.RELEASE_DRY_RUN ? null : 'ci-hibernate.deploy.settings.maven',
+							mavenLocalRepo: env.WORKSPACE_TMP + '/.m2repository') {
+						withCredentials([usernamePassword(credentialsId: 'gradle-plugin-portal-api-key', passwordVariable: 'GRADLE_PUBLISH_SECRET', usernameVariable: 'GRADLE_PUBLISH_KEY'),
+										 gitUsernamePassword(credentialsId: 'username-and-token.Hibernate-CI.github.com', gitToolName: 'Default')]) {
+							dir('.release/scripts') {
+								sh 'git clone https://github.com/hibernate/hibernate-release-scripts.git .'
+							}
+
+							sh "bash -xe .release/scripts/prepare-release.sh -j -b ${env.GIT_BRANCH} -v ${params.DEVELOPMENT_VERSION} infra-gradle-plugin ${params.RELEASE_VERSION}"
+							sh "./gradlew publishPlugins"
+							sh "bash -xe .release/scripts/update-version.sh infra-gradle-plugin ${params.DEVELOPMENT_VERSION}"
+							sh "bash -xe .release/scripts/push-upstream.sh infra-gradle-plugin ${params.RELEASE_VERSION} true"
+						}
+					}
+				}
+			}
+		}
+	}
+	post {
+		always {
+			notifyBuildResult notifySuccessAfterSuccess: true, maintainers: 'marko@hibernate.org'
+		}
+	}
+}
