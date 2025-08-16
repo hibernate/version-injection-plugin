@@ -21,7 +21,6 @@
  * 51 Franklin Street, Fifth Floor
  * Boston, MA  02110-1301  USA
  */
-
 package org.hibernate.build.gradle.inject;
 
 import java.io.BufferedOutputStream;
@@ -33,7 +32,6 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
-import java.util.List;
 
 import javassist.ClassPool;
 import javassist.CtClass;
@@ -48,8 +46,9 @@ import javassist.bytecode.FieldInfo;
 import org.gradle.api.Action;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
-import org.gradle.api.plugins.JavaPluginConvention;
 import org.gradle.api.tasks.SourceSet;
+import org.gradle.api.tasks.SourceSetContainer;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,43 +64,33 @@ public class InjectionAction implements Action<Task> {
 	private LoaderClassPath loaderClassPath;
 	private ClassPool classPool;
 
-	private final Project project;
-	private List<TargetMember> targetMembers = new ArrayList<TargetMember>();
+	private final InjectionSpec injectionSpec;
 
-	public InjectionAction(Project project) {
-		this.project = project;
-	}
-
-	public void into(String className, String member) {
-		into( new TargetMember( className, member ) );
-	}
-
-	private void into(TargetMember targetMember) {
-		targetMembers.add( targetMember );
+	public InjectionAction(InjectionSpec injectionSpec) {
+		this.injectionSpec = injectionSpec;
 	}
 
 	@Override
 	public void execute(Task task) {
-		final ClassLoader runtimeScopeClassLoader = buildRuntimeScopeClassLoader();
+		final ClassLoader runtimeScopeClassLoader = buildRuntimeScopeClassLoader( task.getProject() );
 		loaderClassPath = new LoaderClassPath( runtimeScopeClassLoader );
 		classPool =  new ClassPool( true );
 		classPool.appendClassPath( loaderClassPath );
 
 		try {
-			performInjections();
+			performInjections( task.getProject() );
 		}
 		finally {
 			loaderClassPath.close();
 		}
 	}
 
-	private ClassLoader buildRuntimeScopeClassLoader() {
-		final ArrayList<URL> classPathUrls = new ArrayList<URL>();
+	private ClassLoader buildRuntimeScopeClassLoader(Project project) {
+		final ArrayList<URL> classPathUrls = new ArrayList<>();
 		final SourceSet mainSourceSet = project
-				.getConvention()
-				.getPlugin( JavaPluginConvention.class )
-				.getSourceSets()
-				.findByName( SourceSet.MAIN_SOURCE_SET_NAME );
+				.getExtensions()
+				.getByType( SourceSetContainer.class )
+				.getByName( SourceSet.MAIN_SOURCE_SET_NAME );
 		for ( File file : mainSourceSet.getRuntimeClasspath() ) {
 			try {
 				classPathUrls.add( file.toURI().toURL() );
@@ -113,10 +102,10 @@ public class InjectionAction implements Action<Task> {
 		return new URLClassLoader( classPathUrls.toArray( new URL[classPathUrls.size()] ), getClass().getClassLoader() );
 	}
 
-	private void performInjections() {
+	private void performInjections(Project project) {
 		final String projectVersion = project.getVersion().toString();
 
-		for ( TargetMember targetMember : targetMembers ) {
+		for ( TargetMember targetMember : injectionSpec.getTargetMembers().get() ) {
 			resolveInjectionTarget( targetMember ).inject( projectVersion );
 		}
 	}

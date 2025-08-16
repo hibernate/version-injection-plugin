@@ -25,6 +25,7 @@ package org.hibernate.build.gradle.inject;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.Task;
 
 /**
  * Mainly used to apply the InjectionAction to the main compileJava task
@@ -32,17 +33,21 @@ import org.gradle.api.Project;
  * @author Steve Ebersole
  */
 public class InjectionPlugin implements Plugin<Project> {
-	public static final String CONVENTION_NAME = "versionInjection";
+	public static final String EXTENSION_NAME = "versionInjection";
 
 	@Override
 	public void apply(Project project) {
-		// The action to run after compilation
-		final InjectionAction injectionAction = new InjectionAction( project );
-		project.getTasks().findByName( "compileJava" ).doLast( injectionAction );
+		project.getPluginManager().apply( "java" );
 
 		// Allow user to configure
-		final ConfigurationDelegate configurationDelegate = new ConfigurationDelegate( injectionAction );
-		project.getConvention().getPlugins().put( CONVENTION_NAME, configurationDelegate );
+		final InjectionSpec injectionSpec = new InjectionSpec( project );
+		project.getExtensions().add( EXTENSION_NAME, injectionSpec );
+
+		// The action to run after compilation
+		final InjectionAction injectionAction = new InjectionAction( injectionSpec );
+		final Task compileJava = project.getTasks().getByName( "compileJava" );
+		compileJava.getInputs().property( "version-injection-targets", injectionSpec.getTargetMembers() );
+		compileJava.doLast( injectionAction );
 	}
 
 }
