@@ -68,7 +68,7 @@ pipeline {
 							sh "bash -xe .release/scripts/prepare-release.sh -j -b ${env.GIT_BRANCH} -v ${params.DEVELOPMENT_VERSION} infra-gradle-plugin ${params.RELEASE_VERSION}"
 							sh "./gradlew publishPlugins"
 							sh "bash -xe .release/scripts/update-version.sh infra-gradle-plugin ${params.DEVELOPMENT_VERSION}"
-							sh "bash -xe .release/scripts/push-upstream.sh infra-gradle-plugin ${params.RELEASE_VERSION} true"
+							sh "bash -xe .release/scripts/push-upstream.sh infra-gradle-plugin ${params.RELEASE_VERSION} ${env.GIT_BRANCH} true"
 						}
 					}
 				}
