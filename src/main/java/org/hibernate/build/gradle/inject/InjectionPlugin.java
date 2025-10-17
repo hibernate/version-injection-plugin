@@ -25,7 +25,8 @@ package org.hibernate.build.gradle.inject;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.Task;
+import org.gradle.api.plugins.JavaPluginExtension;
+import org.gradle.api.tasks.TaskProvider;
 
 /**
  * Mainly used to apply the InjectionAction to the main compileJava task
@@ -39,15 +40,23 @@ public class InjectionPlugin implements Plugin<Project> {
 	public void apply(Project project) {
 		project.getPluginManager().apply( "java" );
 
-		// Allow user to configure
-		final InjectionSpec injectionSpec = new InjectionSpec( project );
-		project.getExtensions().add( EXTENSION_NAME, injectionSpec );
+		final InjectionSpec injectionSpec = project.getExtensions().create( EXTENSION_NAME, InjectionSpec.class );
 
-		// The action to run after compilation
-		final InjectionAction injectionAction = new InjectionAction( injectionSpec );
-		final Task compileJava = project.getTasks().getByName( "compileJava" );
-		compileJava.getInputs().property( "version-injection-targets", injectionSpec.getTargetMembers() );
-		compileJava.doLast( injectionAction );
+		final TaskProvider<InjectionTask> injectionTaskProvider = project.getTasks().register(
+				InjectionTask.TASK_NAME, InjectionTask.class, task -> {
+					JavaPluginExtension javaExtension = (JavaPluginExtension) project.getExtensions().getByName( "java" );
+
+					task.getVersion().set( injectionSpec.getVersion() );
+					task.getInjectionTargets().set( injectionSpec.getTargetMembers() );
+
+					task.getClasspath().setFrom(
+							javaExtension.getSourceSets().getByName( "main" ).getOutput().getClassesDirs()
+					);
+
+					task.dependsOn( project.getTasks().named( "compileJava" ) );
+				}
+		);
+		project.getTasks().named( "classes" ).configure( classes -> classes.dependsOn( injectionTaskProvider ) );
 	}
 
 }
