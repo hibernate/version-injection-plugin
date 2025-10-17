@@ -33,6 +33,9 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javassist.ClassPool;
 import javassist.CtClass;
 import javassist.CtField;
@@ -43,64 +46,62 @@ import javassist.NotFoundException;
 import javassist.bytecode.ClassFile;
 import javassist.bytecode.ConstantAttribute;
 import javassist.bytecode.FieldInfo;
-import org.gradle.api.Action;
-import org.gradle.api.Project;
-import org.gradle.api.Task;
-import org.gradle.api.tasks.SourceSet;
-import org.gradle.api.tasks.SourceSetContainer;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.gradle.api.DefaultTask;
+import org.gradle.api.file.ConfigurableFileCollection;
+import org.gradle.api.provider.ListProperty;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.InputFiles;
+import org.gradle.api.tasks.TaskAction;
 
 /**
- * Responsible for coordinating the actual injection of project version.  Runs as a Gradle Action (doLast typically
- * to the main CompileJava task)
+ * Responsible for coordinating the actual injection of project version.
  *
  * @author Steve Ebersole
  */
-public class InjectionAction implements Action<Task> {
-	private static final Logger log = LoggerFactory.getLogger( InjectionAction.class );
+public abstract class InjectionTask extends DefaultTask {
+	static final String TASK_NAME = "injectVersion";
+	private static final Logger log = LoggerFactory.getLogger( InjectionTask.class );
 
 	private LoaderClassPath loaderClassPath;
 	private ClassPool classPool;
 
-	private final InjectionSpec injectionSpec;
+	@InputFiles
+	abstract ConfigurableFileCollection getClasspath();
 
-	public InjectionAction(InjectionSpec injectionSpec) {
-		this.injectionSpec = injectionSpec;
-	}
+	@Input
+	public abstract Property<String> getVersion();
 
-	@Override
-	public void execute(Task task) {
-		final ClassLoader runtimeScopeClassLoader = buildRuntimeScopeClassLoader( task.getProject() );
+	@Input
+	public abstract ListProperty<TargetMember> getInjectionTargets();
+
+	@TaskAction
+	public void execute() {
+		final ClassLoader runtimeScopeClassLoader = buildRuntimeScopeClassLoader();
 		loaderClassPath = new LoaderClassPath( runtimeScopeClassLoader );
 		classPool = new ClassPool( true );
 		classPool.appendClassPath( loaderClassPath );
 
-		performInjections( task.getProject() );
+		performInjections();
 	}
 
-	private ClassLoader buildRuntimeScopeClassLoader(Project project) {
+	private ClassLoader buildRuntimeScopeClassLoader() {
 		final ArrayList<URL> classPathUrls = new ArrayList<>();
-		final SourceSet mainSourceSet = project
-				.getExtensions()
-				.getByType( SourceSetContainer.class )
-				.getByName( SourceSet.MAIN_SOURCE_SET_NAME );
-		for ( File file : mainSourceSet.getRuntimeClasspath() ) {
+		getClasspath().forEach( file -> {
 			try {
 				classPathUrls.add( file.toURI().toURL() );
 			}
 			catch (MalformedURLException e) {
 				throw new InjectionException( "Could not determine artifact URL [" + file.getPath() + "]", e );
 			}
-		}
+		} );
 		return new URLClassLoader( classPathUrls.toArray( URL[]::new ), getClass().getClassLoader() );
 	}
 
-	private void performInjections(Project project) {
-		final String projectVersion = project.getVersion().toString();
+	private void performInjections() {
+		final String projectVersion = getVersion().get();
 
-		for ( TargetMember targetMember : injectionSpec.getTargetMembers().get() ) {
+		for ( TargetMember targetMember : getInjectionTargets().get() ) {
 			resolveInjectionTarget( targetMember ).inject( projectVersion );
 		}
 	}
@@ -113,7 +114,7 @@ public class InjectionAction implements Action<Task> {
 				CtField field = ctClass.getField( targetMember.getMemberName() );
 				return new FieldInjectionTarget( targetMember, ctClass, field );
 			}
-			catch( NotFoundException ignore ) {
+			catch (NotFoundException ignore) {
 			}
 
 			// see if it is a method...
@@ -133,7 +134,7 @@ public class InjectionAction implements Action<Task> {
 			// finally throw an exception
 			throw new InjectionException( "Unknown member [" + targetMember.getQualifiedName() + "]" );
 		}
-		catch ( Throwable e ) {
+		catch (Throwable e) {
 			throw new InjectionException( "Unable to resolve class [" + targetMember.getClassName() + "]", e );
 		}
 	}
@@ -146,14 +147,13 @@ public class InjectionAction implements Action<Task> {
 		 * Inject the given value per this target's strategy.
 		 *
 		 * @param value The value to inject.
-		 *
 		 * @throws org.hibernate.build.gradle.inject.InjectionException Indicates a problem performing the injection.
 		 */
 		void inject(String value);
 	}
 
 	private abstract class BaseInjectionTarget implements InjectionTarget {
-		@SuppressWarnings( {"UnusedDeclaration"})
+		@SuppressWarnings({ "UnusedDeclaration" })
 		private final TargetMember targetMember;
 		private final CtClass ctClass;
 		private final File classFileLocation;
@@ -164,7 +164,7 @@ public class InjectionAction implements Action<Task> {
 			try {
 				classFileLocation = new File( loaderClassPath.find( targetMember.getClassName() ).toURI() );
 			}
-			catch ( Throwable e ) {
+			catch (Throwable e) {
 				throw new InjectionException( "Unable to resolve class file path", e );
 			}
 		}
@@ -205,7 +205,7 @@ public class InjectionAction implements Action<Task> {
 		private FieldInjectionTarget(TargetMember targetMember, CtClass ctClass, CtField ctField) {
 			super( targetMember, ctClass );
 			this.ctField = ctField;
-			if ( ! Modifier.isStatic( ctField.getModifiers() ) ) {
+			if ( !Modifier.isStatic( ctField.getModifiers() ) ) {
 				throw new InjectionException( "Field is not static [" + targetMember.getQualifiedName() + "]" );
 			}
 		}
@@ -237,7 +237,7 @@ public class InjectionAction implements Action<Task> {
 			try {
 				ctMethod.setBody( "{return \"" + value + "\";}" );
 			}
-			catch ( Throwable t ) {
+			catch (Throwable t) {
 				throw new InjectionException( "Unable to replace method body", t );
 			}
 		}

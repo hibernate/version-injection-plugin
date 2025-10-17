@@ -33,9 +33,13 @@ public class TargetMember implements Serializable {
 	private final String className;
 	private final String memberName;
 
-	public TargetMember(String className, String memberName) {
+	private TargetMember(String className, String memberName) {
 		this.className = className;
 		this.memberName = memberName;
+	}
+
+	public static TargetMember member(String className, String memberName) {
+		return new TargetMember( className, memberName );
 	}
 
 	public String getClassName() {

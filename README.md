@@ -4,7 +4,7 @@ version-injection-plugin
 Gradle plugin used by Hibernate to inject project version into compiled classes
 
 To use you'd simply apply the plugin (after making sure it is added to your buildscript classpath):
-```
+```groovy
 buildscript {
     ...
     dependencies {
@@ -16,9 +16,12 @@ apply plugin: 'version-injection'
 ```
 
 Then, you'd configure it.  Configuration mainly involves naming the Class member to inject the project version into:
-```
+```groovy
 versionInjection {
-    into( 'com.acme.Version', 'getVersionString' )
+    version.set('version')
+    targetMembers.set(List.of(
+            member('com.acme.Version', 'getVersionString')
+    ))
 }
 ```
 
