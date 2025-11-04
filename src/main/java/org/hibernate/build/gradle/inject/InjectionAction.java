@@ -23,14 +23,18 @@
  */
 package org.hibernate.build.gradle.inject;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.Path;
 import java.util.ArrayList;
 
 import javassist.ClassPool;
@@ -46,6 +50,7 @@ import javassist.bytecode.FieldInfo;
 import org.gradle.api.Action;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
+import org.gradle.api.file.FileCollection;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
 
@@ -72,12 +77,18 @@ public class InjectionAction implements Action<Task> {
 
 	@Override
 	public void execute(Task task) {
-		final ClassLoader runtimeScopeClassLoader = buildRuntimeScopeClassLoader( task.getProject() );
-		loaderClassPath = new LoaderClassPath( runtimeScopeClassLoader );
 		classPool = new ClassPool( true );
-		classPool.appendClassPath( loaderClassPath );
 
-		performInjections( task.getProject() );
+		// Since we are attaching this action to the compile task we "expect" that the outputs here would contain
+		//  something along the lines:
+		//    * hibernate-core/target/classes/java/main,
+		//    * hibernate-core/target/generated/sources/annotationProcessor/java/main,
+		//    * hibernate-core/target/generated/sources/headers/java/main,
+		//    * hibernate-core/target/tmp/compileJava/previous-compilation-data.bin
+		//
+		// and that should be enough to "find" the class file which we want to inject the version into.
+		// Hence, we are not setting the classpath for the ClassPool ^ and will "make" a class by reading the file:
+		performInjections( task.getProject(), task.getOutputs().getFiles() );
 	}
 
 	private ClassLoader buildRuntimeScopeClassLoader(Project project) {
@@ -97,36 +108,37 @@ public class InjectionAction implements Action<Task> {
 		return new URLClassLoader( classPathUrls.toArray( URL[]::new ), getClass().getClassLoader() );
 	}
 
-	private void performInjections(Project project) {
+	private void performInjections(Project project, FileCollection files) {
 		final String projectVersion = project.getVersion().toString();
 
 		for ( TargetMember targetMember : injectionSpec.getTargetMembers().get() ) {
-			resolveInjectionTarget( targetMember ).inject( projectVersion );
+			resolveInjectionTarget( targetMember, files ).inject( projectVersion );
 		}
 	}
 
-	private InjectionTarget resolveInjectionTarget(TargetMember targetMember) {
-		try {
-			final CtClass ctClass = classPool.get( targetMember.getClassName() );
+	private InjectionTarget resolveInjectionTarget(TargetMember targetMember, FileCollection files) {
+		File classFileLocation = locateTargetClass( targetMember, files );
+		try ( InputStream classFile = new BufferedInputStream( new FileInputStream( classFileLocation ) ) ) {
+			final CtClass ctClass = classPool.makeClass( classFile );
 			// see if it is a field...
 			try {
 				CtField field = ctClass.getField( targetMember.getMemberName() );
-				return new FieldInjectionTarget( targetMember, ctClass, field );
+				return new FieldInjectionTarget( targetMember, classFileLocation, ctClass, field );
 			}
-			catch( NotFoundException ignore ) {
+			catch (NotFoundException ignore) {
 			}
 
 			// see if it is a method...
 			for ( CtMethod method : ctClass.getMethods() ) {
 				if ( method.getName().equals( targetMember.getMemberName() ) ) {
-					return new MethodInjectionTarget( targetMember, ctClass, method );
+					return new MethodInjectionTarget( targetMember, classFileLocation, ctClass, method );
 				}
 			}
 
 			// maybe it's a private method ?
 			for ( CtMethod method : ctClass.getDeclaredMethods() ) {
 				if ( method.getName().equals( targetMember.getMemberName() ) ) {
-					return new MethodInjectionTarget( targetMember, ctClass, method );
+					return new MethodInjectionTarget( targetMember, classFileLocation, ctClass, method );
 				}
 			}
 
@@ -136,6 +148,18 @@ public class InjectionAction implements Action<Task> {
 		catch ( Throwable e ) {
 			throw new InjectionException( "Unable to resolve class [" + targetMember.getClassName() + "]", e );
 		}
+	}
+
+	private File locateTargetClass(TargetMember targetMember, FileCollection files) {
+		String relativeClassFilePath = targetMember.getClassName().replace( '.', File.separatorChar ) + ".class";
+		for ( File file : files ) {
+			Path resolved = file.toPath().toAbsolutePath().resolve( relativeClassFilePath );
+			File resolvedFile = resolved.toFile();
+			if ( resolvedFile.exists() ) {
+				return resolvedFile;
+			}
+		}
+		throw new InjectionException( "Unable to locate class [" + targetMember.getClassName() + "] in any of the locations [" + files.getFiles() + "]" );
 	}
 
 	/**
@@ -158,15 +182,10 @@ public class InjectionAction implements Action<Task> {
 		private final CtClass ctClass;
 		private final File classFileLocation;
 
-		protected BaseInjectionTarget(TargetMember targetMember, CtClass ctClass) {
+		protected BaseInjectionTarget(TargetMember targetMember, File classFileLocation, CtClass ctClass) {
 			this.targetMember = targetMember;
 			this.ctClass = ctClass;
-			try {
-				classFileLocation = new File( loaderClassPath.find( targetMember.getClassName() ).toURI() );
-			}
-			catch ( Throwable e ) {
-				throw new InjectionException( "Unable to resolve class file path", e );
-			}
+			this.classFileLocation = classFileLocation;
 		}
 
 		@Override
@@ -202,8 +221,8 @@ public class InjectionAction implements Action<Task> {
 	private class FieldInjectionTarget extends BaseInjectionTarget {
 		private final CtField ctField;
 
-		private FieldInjectionTarget(TargetMember targetMember, CtClass ctClass, CtField ctField) {
-			super( targetMember, ctClass );
+		private FieldInjectionTarget(TargetMember targetMember, File classFileLocation, CtClass ctClass, CtField ctField) {
+			super( targetMember, classFileLocation, ctClass );
 			this.ctField = ctField;
 			if ( ! Modifier.isStatic( ctField.getModifiers() ) ) {
 				throw new InjectionException( "Field is not static [" + targetMember.getQualifiedName() + "]" );
@@ -227,8 +246,8 @@ public class InjectionAction implements Action<Task> {
 	private class MethodInjectionTarget extends BaseInjectionTarget {
 		private final CtMethod ctMethod;
 
-		private MethodInjectionTarget(TargetMember targetMember, CtClass ctClass, CtMethod ctMethod) {
-			super( targetMember, ctClass );
+		private MethodInjectionTarget(TargetMember targetMember, File classFileLocation, CtClass ctClass, CtMethod ctMethod) {
+			super( targetMember, classFileLocation, ctClass );
 			this.ctMethod = ctMethod;
 		}
 
