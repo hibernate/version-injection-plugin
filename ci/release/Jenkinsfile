@@ -61,14 +61,16 @@ pipeline {
 							mavenLocalRepo: env.WORKSPACE_TMP + '/.m2repository') {
 						withCredentials([usernamePassword(credentialsId: 'gradle-plugin-portal-api-key', passwordVariable: 'GRADLE_PUBLISH_SECRET', usernameVariable: 'GRADLE_PUBLISH_KEY'),
 										 gitUsernamePassword(credentialsId: 'username-and-token.Hibernate-CI.github.com', gitToolName: 'Default')]) {
-							dir('.release/scripts') {
-								sh 'git clone https://github.com/hibernate/hibernate-release-scripts.git .'
-							}
+							sshagent(['ed25519.Hibernate-CI.github.com']) {
+								dir('.release/scripts') {
+									sh 'git clone https://github.com/hibernate/hibernate-release-scripts.git .'
+								}
 
-							sh "bash -xe .release/scripts/prepare-release.sh -j -b ${env.GIT_BRANCH} -v ${params.DEVELOPMENT_VERSION} infra-gradle-plugin ${params.RELEASE_VERSION}"
-							sh "./gradlew publishPlugins"
-							sh "bash -xe .release/scripts/update-version.sh infra-gradle-plugin ${params.DEVELOPMENT_VERSION}"
-							sh "bash -xe .release/scripts/push-upstream.sh infra-gradle-plugin ${params.RELEASE_VERSION} ${env.GIT_BRANCH} true"
+								sh "bash -xe .release/scripts/prepare-release.sh -j -b ${env.GIT_BRANCH} -v ${params.DEVELOPMENT_VERSION} infra-gradle-plugin ${params.RELEASE_VERSION}"
+								sh "./gradlew publishPlugins"
+								sh "bash -xe .release/scripts/update-version.sh infra-gradle-plugin ${params.DEVELOPMENT_VERSION}"
+								sh "bash -xe .release/scripts/push-upstream.sh infra-gradle-plugin ${params.RELEASE_VERSION} ${env.GIT_BRANCH} true"
+							}
 						}
 					}
 				}
