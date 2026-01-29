@@ -31,28 +31,20 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.nio.file.Path;
-import java.util.ArrayList;
 
 import javassist.ClassPool;
 import javassist.CtClass;
 import javassist.CtField;
 import javassist.CtMethod;
-import javassist.LoaderClassPath;
 import javassist.Modifier;
 import javassist.NotFoundException;
 import javassist.bytecode.ClassFile;
 import javassist.bytecode.ConstantAttribute;
 import javassist.bytecode.FieldInfo;
 import org.gradle.api.Action;
-import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.file.FileCollection;
-import org.gradle.api.tasks.SourceSet;
-import org.gradle.api.tasks.SourceSetContainer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,13 +58,12 @@ import org.slf4j.LoggerFactory;
 public class InjectionAction implements Action<Task> {
 	private static final Logger log = LoggerFactory.getLogger( InjectionAction.class );
 
-	private LoaderClassPath loaderClassPath;
 	private ClassPool classPool;
 
 	private final InjectionSpec injectionSpec;
 
 	public InjectionAction(InjectionSpec injectionSpec) {
-		this.injectionSpec = injectionSpec;
+        this.injectionSpec = injectionSpec;
 	}
 
 	@Override
@@ -88,31 +79,12 @@ public class InjectionAction implements Action<Task> {
 		//
 		// and that should be enough to "find" the class file which we want to inject the version into.
 		// Hence, we are not setting the classpath for the ClassPool ^ and will "make" a class by reading the file:
-		performInjections( task.getProject(), task.getOutputs().getFiles() );
+		performInjections( task.getOutputs().getFiles() );
 	}
 
-	private ClassLoader buildRuntimeScopeClassLoader(Project project) {
-		final ArrayList<URL> classPathUrls = new ArrayList<>();
-		final SourceSet mainSourceSet = project
-				.getExtensions()
-				.getByType( SourceSetContainer.class )
-				.getByName( SourceSet.MAIN_SOURCE_SET_NAME );
-		for ( File file : mainSourceSet.getRuntimeClasspath() ) {
-			try {
-				classPathUrls.add( file.toURI().toURL() );
-			}
-			catch (MalformedURLException e) {
-				throw new InjectionException( "Could not determine artifact URL [" + file.getPath() + "]", e );
-			}
-		}
-		return new URLClassLoader( classPathUrls.toArray( URL[]::new ), getClass().getClassLoader() );
-	}
-
-	private void performInjections(Project project, FileCollection files) {
-		final String projectVersion = project.getVersion().toString();
-
+	private void performInjections(FileCollection files) {
 		for ( TargetMember targetMember : injectionSpec.getTargetMembers().get() ) {
-			resolveInjectionTarget( targetMember, files ).inject( projectVersion );
+			resolveInjectionTarget( targetMember, files ).inject( injectionSpec.getProjectVersion().get() );
 		}
 	}
 
