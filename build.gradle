@@ -48,3 +48,27 @@ gradlePlugin {
         }
     }
 }
+
+
+tasks.register("releasePrepare") {
+    group = "release"
+    // While we not necessarily need to stage the plugin,
+    //  we do it for the release scripts to not fail the checks:
+    dependsOn tasks.publishAllPublicationsToStagingRepository
+}
+
+tasks.register("releaseGradlePluginPerform") {
+    group "release"
+    description "An explicit task for publishing Gradle Plugins to the Plugin Portal"
+
+    dependsOn tasks.publishPlugins
+}
+
+var publishingExtension = project.getExtensions().getByType(PublishingExtension) as PublishingExtension
+
+publishingExtension.repositories {
+    maven {
+        name = "staging"
+        url = rootProject.layout.buildDirectory.dir("staging-deploy${File.separator}maven")
+    }
+}
